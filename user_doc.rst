@@ -5,7 +5,7 @@ zigbee2mqtt
 Das Plugin dienst zur Steuerung von Zigbee Devices via Zigbee2MQTT über MQTT. Notwendige Voraussetzung ist eine
 funktionsfähige und laufende Installation von Zigbee2Mqtt. Die Installation, Konfiguration und der Betrieb ist hier
 beschrieben: https://www.zigbee2mqtt.io/
-Dort findet man ebenfalls die unterstützten Zigbee Geräte
+Dort findet man ebenfalls die unterstützten Zigbee Geräte.
 
 .. attention::
 
@@ -40,7 +40,11 @@ Für die Nutzung eines Zigbee Devices müssen in dem entsprechenden Item die zwe
             zigbee2mqtt_attr: humidity
 
 
-Die folgenden Attribute sind definiert und werden vom Plugin unterstützt:
+Dabei entspricht das Attribute ``zigbee2mqtt_topic`` dem Zigbee ``Friendly Name`` des Device.
+Das Attribut ``zigbee2mqtt_attr`` entspricht dem jeweiligen Tag aus der Payload, der verwendet werden soll.
+Welche Tags beim jeweiligen Device verfügbar sind, kann man im WebIF des Pluigns sehen.
+
+Die folgenden Tags des Attributes ``zigbee2mqtt_attr``sind definiert und werden vom Plugin unterstützt:
 
             - online
             - bridge_permit_join
