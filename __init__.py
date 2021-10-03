@@ -507,7 +507,7 @@ class Zigbee2Mqtt(MqttPlugin):
                         self.zigbee2mqtt_devices[device]['meta'] = {}
                     self.zigbee2mqtt_devices[device]['meta'].update(element)
             else:
-                 self.logger.debug(f"(Received payload {device_data} on topic {topic} is not of type dict")
+                 self.logger.debug(f"(Received payload {device_data} is not of type dict")
                  
     def _bool2str(self, bool_value, typus):
         if type(bool_value) is bool:
