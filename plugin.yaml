@@ -89,6 +89,9 @@ item_attributes:
             - tamper
             - sensitivity
             - contact
+            - brightness
+            - color_temp
+            - state
             
         valid_list_description:
             de:
