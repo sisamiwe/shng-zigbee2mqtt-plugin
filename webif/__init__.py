@@ -109,11 +109,12 @@ class WebInterface(SmartPluginWebIf):
                 else:
                     data['device_values'][device]['lqi'] = '-'
                     data['device_values'][device]['data'] = '-'
-                data['device_values'][device]['last_seen'] = self.plugin.zigbee2mqtt_devices[device]['meta']['lastSeen'].strftime('%d.%m.%Y %H:%M:%S')
+                if 'meta' in self.plugin.zigbee2mqtt_devices[device]:
+                    data['device_values'][device]['last_seen'] = self.plugin.zigbee2mqtt_devices[device]['meta']['lastSeen'].strftime('%d.%m.%Y %H:%M:%S')
 
             # return it as json the the web page
             try:
-                return json.dumps(data)
+                return json.dumps(data, default=str)
             except Exception as e:
                 self.logger.error("get_data_html exception: {}".format(e))
                 return {}

@@ -38,7 +38,6 @@
 			}
 		});
 </script>
-
 <script>
 	function handleUpdatedData(response, dataSet=null) {
 		if (dataSet === 'devices_info' || dataSet === null) {
@@ -191,7 +190,7 @@
                 {% for device in p.zigbee2mqtt_devices %}
                     {% if p.zigbee2mqtt_devices[device]['meta'] %}
                     <tr>
-                        <td>{{ loop.index }}</td>
+                        <td class="py-1">{{ loop.index }}</td>
                         <td class="py-1">{{ device }}</td>
                         <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['ieeeAddr'] }}</td>
                         <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['vendor'] }}</td>
