@@ -24,9 +24,10 @@
 
 from datetime import datetime
 import logging
-from lib.module import Modules
+
 from lib.model.mqttplugin import *
 from lib.item import Items
+
 from lib.utils import Utils
 
 from .webif import WebInterface
@@ -38,9 +39,9 @@ class Zigbee2Mqtt(MqttPlugin):
     the update functions for the items
     """
 
-    PLUGIN_VERSION = '1.0.D'
+    PLUGIN_VERSION = '1.1.A'
 
-    def __init__(self, sh):
+    def __init__(self, sh, *args, **kwargs):
         """
         Initalizes the plugin.
 
@@ -63,6 +64,7 @@ class Zigbee2Mqtt(MqttPlugin):
         # get the parameters for the plugin (as defined in metadata plugin.yaml):
         self.topic_level1 = self.get_parameter_value('base_topic').lower()
         self._cycle = self.get_parameter_value('poll_period')
+        self.webif_pagelength = self.get_parameter_value('webif_pagelength')
 
         # Initialization code goes here
         self.zigbee2mqtt_devices = {}            # to hold device information for web interface; contains data of all found devices
@@ -81,6 +83,7 @@ class Zigbee2Mqtt(MqttPlugin):
         self.add_zigbee2mqtt_subscription(self.topic_level1, '+', 'log', '', '', 'dict', callback=self.on_mqtt_announce)
 
         self.local_ip = ''
+        self.alive = None
 
         # if plugin should start even without web interface
         self.init_webinterface(WebInterface)
@@ -140,16 +143,9 @@ class Zigbee2Mqtt(MqttPlugin):
                 self.logger.debug(f"parsing item: {item.id()}")
 
             topic_level2 = self.get_iattr_value(item.conf, 'zigbee2mqtt_topic')
-            zigbee2mqtt_attr = self.get_iattr_value(item.conf, 'zigbee2mqtt_attr')
+            topic_level2 = self._handle_hex_in_topic_level2(topic_level2, item)
             
-            if topic_level2 is not None:
-                # check if zigbee device short name has been used without parentheses; if so this will be normally parsed to a number and therefore mismatch with defintion
-                try:
-                    topic_level2 = int(topic_level2)
-                    self.logger.warning(f"Probably for item {item.id()} the IEEE Adress has been used for attribute 'topic_level2'. Trying to make that work but it will cause exceptions. To prevent this, the short name need to be defined as string by using parentheses")
-                    topic_level2 = str(hex(topic_level2))
-                except:
-                    pass
+            zigbee2mqtt_attr = self.get_iattr_value(item.conf, 'zigbee2mqtt_attr')
 
             if not self.zigbee2mqtt_plugin_devices.get(topic_level2):
                 self.zigbee2mqtt_plugin_devices[topic_level2] = {}
@@ -189,15 +185,18 @@ class Zigbee2Mqtt(MqttPlugin):
             self.logger.debug(f"update_item: {item.id()} called by {caller} and source {source}")
 
         if self.alive and self.get_shortname() not in caller:
-        # code to execute if the plugin is not stopped  AND only, if the item has not been changed for this plugin
+            # code to execute if the plugin is not stopped  AND only, if the item has not been changed for this plugin
 
             # get zigbee2mqtt attributes of caller item
             topic_level2 = self.get_iattr_value(item.conf, 'zigbee2mqtt_topic')
+            topic_level2 = self._handle_hex_in_topic_level2(topic_level2, item)
+            
             zigbee2mqtt_attr = self.get_iattr_value(item.conf, 'zigbee2mqtt_attr')
 
             if zigbee2mqtt_attr in ['bridge_permit_join', 'bridge_health_check', 'bridge_restart', 'bridge_networkmap_raw', 'device_remove', 
                                     'device_ota_update_check', 'device_ota_update_update', 'device_configure', 'device_options', 'device_rename', 
                                     'device_bind', 'device_unbind', 'device_configure_reporting', 'state', 'color_temp', 'brightness', 'hue', 'saturation']:
+                
                 self.logger.info(f"update_item: {item.id()}, item has been changed in SmartHomeNG outside of this plugin in {caller} with value {item()}")
                 payload = None
                 bool_values = None
@@ -293,7 +292,6 @@ class Zigbee2Mqtt(MqttPlugin):
                     self.publish_zigbee2mqtt_topic(self.topic_level1, topic_level2, topic_level3, topic_level4, topic_level5, payload, item, bool_values=bool_values)
                 else:
                     self.logger.warning(f"update_item: {item.id()}, no value/payload defined (by {caller})")
-
             else:
                 self.logger.warning(f"update_item: {item.id()}, trying to change item in SmartHomeNG that is readonly (by {caller})")
 
@@ -335,7 +333,7 @@ class Zigbee2Mqtt(MqttPlugin):
         build the topic in zigbee2mqtt style and publish to mqtt
 
         :param topic_level1:    basetopic of topic to publish
-        :param topic_level2:    unique part of topic to publish
+        :param topic_level2:    unique part of topic to publish; ZigbeeDevice
         :param topic_level3:    level3 of topic to publish
         :param topic_level4:    level4 of topic to publish
         :param topic_level5:    level5 of topic to publish
@@ -411,6 +409,7 @@ class Zigbee2Mqtt(MqttPlugin):
                     else:
                         if debug_logger is True:
                             self.logger.debug(f"(Received payload {payload} on topic {topic} is not of type dict")
+            
             elif topic_level3 == 'config':
                 if topic_level4 == '':
                     # topic_level1=zigbee2mqtt, topic_level2=bridge, topic_level3=config, topic_level4=, topic_level5=, payload={'commit': 'abd8a09', 'coordinator': {'meta': {'maintrel': 3, 'majorrel': 2, 'minorrel': 6, 'product': 0, 'revision': 20201127, 'transportrev': 2}, 'type': 'zStack12'}, 'log_level': 'info', 'network': {'channel': 11, 'extendedPanID': '0xdddddddddddddddd', 'panID': 6754}, 'permit_join': False, 'version': '1.18.2'}
@@ -424,6 +423,7 @@ class Zigbee2Mqtt(MqttPlugin):
                     # topic_level1=zigbee2mqtt, topic_level2=bridge, topic_level3=config, topic_level4=devices, topic_level5=, payload=[{'dateCode': '20201127', 'friendly_name': 'Coordinator', 'ieeeAddr': '0x00124b001cd4bbf0', 'lastSeen': 1618861562211, 'networkAddress': 0, 'softwareBuildID': 'zStack12', 'type': 'Coordinator'}, {'dateCode': '20190311', 'description': 'TRADFRI open/close remote', 'friendly_name': 'TRADFRI E1766_01', 'hardwareVersion': 1, 'ieeeAddr': '0x588e81fffe28dec5', 'lastSeen': 1618511300581, 'manufacturerID': 4476, 'manufacturerName': 'IKEA of Sweden', 'model': 'E1766', 'modelID': 'TRADFRI open/close remote', 'networkAddress': 39405, 'powerSource': 'Battery', 'softwareBuildID': '2.2.010', 'type': 'EndDevice', 'vendor': 'IKEA'}, {'dateCode': '20201026', 'description': 'Temperature and humidity sensor', 'friendly_name': 'SNZB02_01', 'hardwareVersion': 1, 'ieeeAddr': '0x00124b00231e45b8', 'lastSeen': 1618861025534, 'manufacturerID': 0, 'manufacturerName': 'eWeLink', 'model': 'SNZB-02', 'modelID': 'TH01', 'networkAddress': 18841, 'powerSource': 'Battery', 'type': 'EndDevice', 'vendor': 'SONOFF'}, {'description': 'Aqara vibration sensor', 'friendly_name': 'DJT11LM_01', 'ieeeAddr': '0x00158d00067a0c2d', 'lastSeen': 1618383303863, 'manufacturerID': 4151, 'manufacturerName': 'LUMI', 'model': 'DJT11LM', 'modelID': 'lumi.vibration.aq1', 'networkAddress': 60244, 'powerSource': 'Battery', 'type': 'EndDevice', 'vendor': 'Xiaomi'}]
                     if type(payload) is list:
                         self._get_zigbee_meta_data(payload)
+            
             elif topic_level3 == 'log':
                 if topic_level4 == '':
                     # topic_level1=zigbee2mqtt, topic_level2=bridge, topic_level3=log, topic_level4=, topic_level5=, payload={"message":[{"dateCode":"20201127","friendly_name":"Coordinator","ieeeAddr":"0x00124b001cd4bbf0","lastSeen":1617961599543,"networkAddress":0,"softwareBuildID":"zStack12","type":"Coordinator"},{"dateCode":"20190311","description":"TRADFRI open/close remote","friendly_name":"TRADFRI E1766_01","hardwareVersion":1,"ieeeAddr":"0x588e81fffe28dec5","lastSeen":1617873345111,"manufacturerID":4476,"manufacturerName":"IKEA of Sweden","model":"E1766","modelID":"TRADFRI open/close remote","networkAddress":39405,"powerSource":"Battery","softwareBuildID":"2.2.010","type":"EndDevice","vendor":"IKEA"},{"dateCode":"20201026","description":"Temperature and humidity sensor","friendly_name":"SNZB02_01","hardwareVersion":1,"ieeeAddr":"0x00124b00231e45b8","lastSeen":1617961176234,"manufacturerID":0,"manufacturerName":"eWeLink","model":"SNZB-02","modelID":"TH01","networkAddress":18841,"powerSource":"Battery","type":"EndDevice","vendor":"SONOFF"}],"type":"devices"}'
@@ -444,6 +444,7 @@ class Zigbee2Mqtt(MqttPlugin):
                     else:
                         if debug_logger is True:
                             self.logger.debug(f"(Received payload {payload} on topic {topic} is not of type dict")
+            
             elif topic_level3 == 'event':
                 # {"type":"device_joined","data":{"friendly_name":"0x90fd9ffffe6494fc","ieee_address":"0x90fd9ffffe6494fc"}}
                 # {"type":"device_announce","data":{"friendly_name":"0x90fd9ffffe6494fc","ieee_address":"0x90fd9ffffe6494fc"}}
@@ -452,24 +453,27 @@ class Zigbee2Mqtt(MqttPlugin):
                 # {"type":"device_interview","data":{"friendly_name":"0x90fd9ffffe6494fc","status":"failed","ieee_address":"0x90fd9ffffe6494fc"}}
                 # {"type":"device_leave","data":{"ieee_address":"0x90fd9ffffe6494fc"}}
                 if topic_level4 == '':
-                    event_type = payload.get('type')
+                    # event_type = payload.get('type')
                     if debug_logger is True:
                         self.logger.debug(f"event info message not implemented yet.")
+            
             else:
                 if debug_logger is True:
                     self.logger.debug(f"Function type message not implemented yet.")
+        
         elif (topic_level3 + topic_level4 + topic_level5) == '':
             # topic_level1=zigbee2mqtt, topic_level2=SNZB02_01, topic_level3=, topic_level4=, topic_level5=, payload '{"battery":100,"device":{"applicationVersion":5,"dateCode":"20201026","friendlyName":"SNZB02_01","hardwareVersion":1,"ieeeAddr":"0x00124b00231e45b8","manufacturerID":0,"manufacturerName":"eWeLink","model":"SNZB-02","networkAddress":18841,"powerSource":"Battery","type":"EndDevice","zclVersion":1},"humidity":45.12,"linkquality":157,"temperature":16.26,"voltage":3200}'
             # topic_level1=zigbee2mqtt, topic_level2=TRADFRI E1766_01, topic_level3=, topic_level4=, topic_level5=, payload={'battery': 74, 'device': {'applicationVersion': 33, 'dateCode': '20190311', 'friendlyName': 'TRADFRI E1766_01', 'hardwareVersion': 1, 'ieeeAddr': '0x588e81fffe28dec5', 'manufacturerID': 4476, 'manufacturerName': 'IKEA of Sweden', 'model': 'E1766', 'networkAddress': 39405, 'powerSource': 'Battery', 'softwareBuildID': '2.2.010', 'stackVersion': 98, 'type': 'EndDevice', 'zclVersion': 3}, 'linkquality': 141}
             # topic_level1=zigbee2mqtt, topic_level2=LEDVANCE_E27_TW_01, topic_level3=, topic_level4=, topic_level5=, payload={'brightness': 254, 'color': {'x': 0.4599, 'y': 0.4106}, 'color_mode': 'color_temp', 'color_temp': 370, 'color_temp_startup': 65535, 'last_seen': 1632943562477, 'linkquality': 39, 'state': 'ON', 'update': {'state': 'idle'}, 'update_available': False}
             # topic_level1=zigbee2mqtt, topic_level2=0xf0d1b800001574df, topic_level3=, topic_level4=, topic_level5=, payload={'brightness': 166, 'color': {'hue': 296, 'saturation': 69}, 'color_mode': 'hs', 'color_temp': 405, 'last_seen': 1638183778409, 'linkquality': 159, 'state': 'ON', 'update': {'state': 'idle'}, 'update_available': False}
+            
             if type(payload) is dict:
                 # Wenn Geräte zur Laufzeit des Plugins hinzugefügt werden, werden diese im dict ergänzt
                 if not self.zigbee2mqtt_devices.get(topic_level2):
                     self.zigbee2mqtt_devices[topic_level2] = {}
                     self.logger.info(f"New device discovered: {topic_level2}")
                     
-                ## Korrekturen in der Payload
+                # Korrekturen in der Payload
                 
                 # Umbenennen des Key 'friendlyName' in 'friendly_name', damit er identisch zu denen aus den Log und Config Topics ist
                 if 'device' in payload:
@@ -505,13 +509,13 @@ class Zigbee2Mqtt(MqttPlugin):
                         
                     if color_mode == 'xy':
                         payload['color_x'] = color['x']
-                        payload['color_y']  = color['y']
+                        payload['color_y'] = color['y']
                 
                 if not self.zigbee2mqtt_devices[topic_level2].get('data'):
                     self.zigbee2mqtt_devices[topic_level2]['data'] = {}
                 self.zigbee2mqtt_devices[topic_level2]['data'].update(payload)
 
-                ## Setzen des Itemwertes
+                # Setzen des Itemwertes
                 if topic_level2 in list(self.zigbee2mqtt_plugin_devices.keys()):
                     if debug_logger is True:
                         self.logger.debug(f"Item to be checked for update and to be updated")
@@ -607,4 +611,16 @@ class Zigbee2Mqtt(MqttPlugin):
         for device in self.zigbee2mqtt_plugin_devices:
             attribut = (list(self.zigbee2mqtt_plugin_devices[device]['connected_items'].keys())[0])[5:]
             payload = '{"' + str(attribut) + '" : ""}'
-            self.publish_zigbee2mqtt_topic(self.topic_level1, str(device), 'get', '', '', payload)    
+            self.publish_zigbee2mqtt_topic(self.topic_level1, str(device), 'get', '', '', payload)
+            
+    def _handle_hex_in_topic_level2(self, topic_level2, item):
+        """
+        check if zigbee device short name has been used without parentheses; if so this will be normally parsed to a number and therefore mismatch with defintion
+        """
+        try:
+            topic_level2 = int(topic_level2)
+            self.logger.warning(f"Probably for item {item.id()} the IEEE Adress has been used for item attribute 'zigbee2mqtt_topic'. Trying to make that work but it will cause exceptions. To prevent this, the short name need to be defined as string by using parentheses")
+            topic_level2 = str(hex(topic_level2))
+        except Exception:
+            pass
+        return topic_level2

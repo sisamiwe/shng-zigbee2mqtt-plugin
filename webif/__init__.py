@@ -25,9 +25,6 @@
 #
 #########################################################################
 
-import datetime
-import time
-import os
 import json
 
 from lib.item import Items
@@ -61,7 +58,6 @@ class WebInterface(SmartPluginWebIf):
 
         self.tplenv = self.init_template_environment()
 
-
     @cherrypy.expose
     def index(self, reload=None):
         """
@@ -73,13 +69,12 @@ class WebInterface(SmartPluginWebIf):
         """
         self.plugin.get_broker_info()
 
-        # sort zigbee2mqtt_items for display in web interface
-        self.plugin.zigbee2mqtt_items = sorted(self.plugin.zigbee2mqtt_items, key=lambda k: str.lower(k['_path']))
-
         tmpl = self.tplenv.get_template('index.html')
         # add values to be passed to the Jinja2 template eg: tmpl.render(p=self.plugin, interface=interface, ...)
-        return tmpl.render(p=self.plugin, items=sorted(self.items.return_items(), key=lambda k: str.lower(k['_path'])))
-
+        return tmpl.render(p=self.plugin,
+                           webif_pagelength=self.plugin.webif_pagelength,
+                           items=sorted(self.plugin.zigbee2mqtt_items, key=lambda k: str.lower(k['_path'])),
+                           item_count=len(self.plugin.zigbee2mqtt_items))
 
     @cherrypy.expose
     def get_data_html(self, dataSet=None):
@@ -94,18 +89,35 @@ class WebInterface(SmartPluginWebIf):
         if dataSet is None:
             # get the new data
             self.plugin.get_broker_info()
-            data = {}
+            data = dict()
             data['broker_info'] = self.plugin._broker
             data['broker_uptime'] = self.plugin.broker_uptime()
-            data['item_values'] = self.plugin._item_values
+
+            data['item_values'] = {}
+            for item in self.plugin.zigbee2mqtt_items:
+                data['item_values'][item.id()] = {}
+                data['item_values'][item.id()]['value'] = item.property.value
+                data['item_values'][item.id()]['last_update'] = item.property.last_update.strftime('%d.%m.%Y %H:%M:%S')
+                data['item_values'][item.id()]['last_change'] = item.property.last_change.strftime('%d.%m.%Y %H:%M:%S')
+
+            data['device_values'] = {}
+            for device in self.plugin.zigbee2mqtt_devices:
+                data['device_values'][device] = {}
+                if 'data' in self.plugin.zigbee2mqtt_devices[device]:
+                    data['device_values'][device]['lqi'] = self.plugin.zigbee2mqtt_devices[device]['data']['linkquality']
+                    data['device_values'][device]['data'] = list(self.plugin.zigbee2mqtt_devices[device]['data'].keys())
+                else:
+                    data['device_values'][device]['lqi'] = '-'
+                    data['device_values'][device]['data'] = '-'
+                data['device_values'][device]['last_seen'] = self.plugin.zigbee2mqtt_devices[device]['meta']['lastSeen'].strftime('%d.%m.%Y %H:%M:%S')
 
             # return it as json the the web page
             try:
-                return json.dumps(data)
+                json_data = json.dumps(data)
+                self.logger.error(f"json_data={json_data}")
+                return json_data
             except Exception as e:
                 self.logger.error("get_data_html exception: {}".format(e))
                 return {}
 
         return
-
-
