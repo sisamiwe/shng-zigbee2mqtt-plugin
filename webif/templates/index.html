@@ -120,7 +120,7 @@
 
 {% set tabcount = 4 %}
 
-{% if p.zigbee2mqtt_items == [] %}
+{% if not p.zigbee2mqtt_items == [] %}
     {% set start_tab = 2 %}
 {% endif %}
 

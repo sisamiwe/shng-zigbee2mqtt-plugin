@@ -113,9 +113,7 @@ class WebInterface(SmartPluginWebIf):
 
             # return it as json the the web page
             try:
-                json_data = json.dumps(data)
-                self.logger.error(f"json_data={json_data}")
-                return json_data
+                return json.dumps(data)
             except Exception as e:
                 self.logger.error("get_data_html exception: {}".format(e))
                 return {}
