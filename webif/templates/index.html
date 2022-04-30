@@ -1,42 +1,105 @@
 {% extends "base_plugin.html" %}
 {% set logo_frame = false %}
-{% set update_interval = 2000 %}
+{% set update_interval = 5000 %}
 
 {% block pluginstyles %}
 <style>
-  table th.value {
-    width: 100px;
+  table th.no {
+    width: 20px;
   }
+  table th.lqi {
+    width: 30px;
+  }
+  table th.data {
+    width: 300px;
+  }
+  table th.item {
+    width: 450px;
+  }
+  table th.type {
+    width: 100px;
+    }
+  table th.datatype {
+    width: 250px;
+  }
+  table th.value {
+    width: 250px;
+  }
+  /* hides the maintable datatable by default until it is initialized. */
+  
   #itemtable {
-     display: none;
+    display: none;
+    table-layout: fixed;
   }
   #devicetable {
-     display: none;
+    display: none;
+    table-layout: fixed;
   }
   #mtable1 {
-     display: none;
+    display: none;
+    table-layout: fixed;
   }
   #mtable2 {
-     display: none;
+    display: none;
+    table-layout: fixed;
   }
+  
+  /*
+  These are used for highligt effect in web interface when a value changes. If you don't want to overwrite the
+  default color, you can remove the entries here as the classes are already defined in smarthomeng.css
+  */
+  
+  .shng_effect_highlight {
+    background-color: #FFFFE0;
+  }
+  .shng_effect_standard {
+    background-color: none;
+  }
+  
 </style>
 {% endblock pluginstyles %}
 
 {% block pluginscripts %}
 <script>
-	$(document).ready( function () {
-		$(window).trigger('datatables_defaults');
-		try {
-      webif_pagelength = document.getElementById('webif_pagelength').innerHTML;
-			table = $('#itemtable').DataTable( { "pageLength": webif_pagelength } );
-            table_2 = $('#devicetable').DataTable( { "pageLength": webif_pagelength } );
-            table_3 = $('#mtable1').DataTable( {} );
-            table_4 = $('#mtable2').DataTable( {} );
-			}
-		catch (e) {
-			console.log("Datatable JS not loaded, showing standard table without reorder option " + e)
-			}
-		});
+  $(document).ready( function () {
+    $(window).trigger('datatables_defaults');
+    
+    try {
+      webif_pagelength = parseInt(document.getElementById('webif_pagelength').innerHTML);
+      if (webif_pagelength == 0) {
+        resize = true;
+        webif_pagelength = -1;
+      }
+      else {
+        resize = false;
+      }
+    }
+    catch (e) {
+      webif_pagelength = 100;
+      resize = false;
+      console.log("Using default values for page length " + webif_pagelength + ", pageResize: " + resize);
+      console.log("Error was " + e);
+    }
+    
+    try {
+      table_1 = $('#itemtable').DataTable( {
+        pageLength: webif_pagelength,
+        pageResize: resize});
+      table_2 = $('#devicetable').DataTable( {
+        pageLength: webif_pagelength,
+        pageResize: resize});
+      table_3 = $('#mtable1').DataTable( {
+        pageLength: webif_pagelength,
+        pageResize: resize});
+      table_4 = $('#mtable2').DataTable( {
+        pageLength: webif_pagelength,
+        pageResize: resize});
+    }
+    catch (e) {
+        console.log("Datatable JS not loaded, showing standard table without reorder option " +e);
+    }
+
+  });
 </script>
 <script>
 	function handleUpdatedData(response, dataSet=null) {
@@ -45,16 +108,15 @@
 			myProto = document.getElementById(dataSet);
 
             for (var item in objResponse['item_values']) {
-				shngInsertText (item+'_value', objResponse['item_values'][item]['value'], 'itemtable');
+				shngInsertText (item+'_value', objResponse['item_values'][item]['value'], 'itemtable', 5);
 				shngInsertText (item+'_last_update', objResponse['item_values'][item]['last_update'], 'itemtable');
 				shngInsertText (item+'_last_change', objResponse['item_values'][item]['last_change'], 'itemtable');
 			}
             
             for (var device in objResponse['device_values']) {
-				shngInsertText (device+'_lqi', objResponse['device_values'][device]['lqi'], 'devicetable');
+				shngInsertText (device+'_lqi', objResponse['device_values'][device]['lqi'], 'devicetable', 5);
 				shngInsertText (device+'_data', objResponse['device_values'][device]['data'], 'devicetable');
 				shngInsertText (device+'_last_seen', objResponse['device_values'][device]['last_seen'], 'devicetable');
-                shngInsertText (device, objResponse['device_values'][device], 'devicetable');
 			}
             
 			shngInsertText ('broker_uptime', objResponse['broker_uptime']);
@@ -78,38 +140,39 @@
 
 
 {% block headtable %}
-	<table class="table table-striped table-hover">
-		<tbody>
-			<tr>
-				<td class="py-1"><strong>{{_('Broker Host')}}</strong></td>
-				<td class="py-1">{{ p.broker_config.host }}</td>
-				<td class="py-1" width="50px"></td>
-				<td class="py-1"><strong>{{_('Broker Port')}}</strong></td>
-				<td class="py-1">{{ p.broker_config.port }}</td>
-				<td class="py-1" width="50px"></td>
-			</tr>
-			<tr>
-				<td class="py-1"><strong>{{_('Benutzer')}}</strong></td>
-				<td class="py-1">{{ p.broker_config.user }}</td>
-				<td class="py-1"></td>
-				<td class="py-1"><strong>{{_('Passwort')}}</strong></td>
-				<td class="py-1">
-				{% if p.broker_config.password %}
-					{% for letter in p.broker_config.password %}*{% endfor %}
-				{% endif %}
-				</td>
-				<td class="py-1"></td>
-			</tr>
-			<tr>
-				<td class="py-1"><strong>{{_('QoS')}}</strong></td>
-				<td class="py-1">{{ p.broker_config.qos }}</td>
-				<td class="py-1"></td>
-				<td class="py-1"><strong>{{_('Zigbee2Mqtt')}}</strong></td>
-				<td class="py-1"><a class="text-shng" href="http://{{ p.local_ip }}:8082" target="_blank">{{ 'GUI' }}</a></td>
-				<td class="py-1"></td>
-			</tr>
-		</tbody>
-	</table>
+<span id='webif_pagelength' style="display:none">{{ webif_pagelength }}</span>
+<table class="table table-striped table-hover">
+    <tbody>
+        <tr>
+            <td class="py-1"><strong>{{_('Broker Host')}}</strong></td>
+            <td class="py-1">{{ p.broker_config.host }}</td>
+            <td class="py-1" width="50px"></td>
+            <td class="py-1"><strong>{{_('Broker Port')}}</strong></td>
+            <td class="py-1">{{ p.broker_config.port }}</td>
+            <td class="py-1" width="50px"></td>
+        </tr>
+        <tr>
+            <td class="py-1"><strong>{{_('Benutzer')}}</strong></td>
+            <td class="py-1">{{ p.broker_config.user }}</td>
+            <td class="py-1"></td>
+            <td class="py-1"><strong>{{_('Passwort')}}</strong></td>
+            <td class="py-1">
+            {% if p.broker_config.password %}
+                {% for letter in p.broker_config.password %}*{% endfor %}
+            {% endif %}
+            </td>
+            <td class="py-1"></td>
+        </tr>
+        <tr>
+            <td class="py-1"><strong>{{_('QoS')}}</strong></td>
+            <td class="py-1">{{ p.broker_config.qos }}</td>
+            <td class="py-1">{{ webif_pagelength }}</td>
+            <td class="py-1"><strong>{{_('Zigbee2Mqtt')}}</strong></td>
+            <td class="py-1"><a class="text-shng" href="http://{{ p.local_ip }}:8082" target="_blank">{{ 'GUI' }}</a></td>
+            <td class="py-1"></td>
+        </tr>
+    </tbody>
+</table>
 {% endblock headtable %}
 
 
@@ -119,100 +182,84 @@
 
 {% set tabcount = 4 %}
 
-{% if not p.zigbee2mqtt_items == [] %}
+{% if not items %}
     {% set start_tab = 2 %}
 {% endif %}
 
 
-{% set tab1title = "<strong>" ~ p.get_shortname() ~ " Items</strong> (" ~ item_count ~ ")" %}
+{% set tab1title = "<strong>" ~ plugin_shortname ~ " Items</strong> (" ~ item_count ~ ")" %}
 {% block bodytab1 %}
-<div class="table-responsive" style="margin-left: 3px; margin-right: 3px;" class="row">
-    <div class="mb-2">
-        <span id='webif_pagelength' style="display:none">{{ webif_pagelength }}</span>
-    </div>
-    <div class="col-sm-12">
-        <table id="itemtable" class="table table-striped table-hover pluginList display">
-            <thead>
+<div class="container-fluid m-2 table-resize">
+    <table id="itemtable" class="table_1 table-striped table-hover pluginList display">
+        <thead>
+            <tr>
+                <th>{{ _('Item') }}</th>
+                <th>{{ _('Typ') }}</th>
+                <th style="text-align: right">{{ _('Wert') }}</th>
+                <th>{{ _('Topic') }}</th>
+                <th>{{ _('Letztes Update') }}</th>
+                <th>{{ _('Letzter Change') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+                {% set item_id = item.id() %}
                 <tr>
-                    <th>{{ _('Item') }}</th>
-                    <th>{{ _('Typ') }}</th>
-                    <th style="text-align: right">{{ _('Wert') }}</th>
-                    <th>{{ _('Topic') }}</th>
-                    <th>{{ _('Letztes Update') }}</th>
-                    <th>{{ _('Letzter Change') }}</th>
+                    <td class="py-1">{{ item_id }}</td>
+                    <td class="py-1">{{ item.property.type }}</td>
+                    <td class="py-1" id="{{ item_id }}_value" style="text-align: right">{{ item()}}</td>
+                    <td class="py-1">{{ p.get_iattr_value(item.conf, 'zigbee2mqtt_topic') }}</td>
+                    <td class="py-1" id="{{ item_id }}_last_update">{{ item.last_update().strftime('%d.%m.%Y %H:%M:%S') }}</td>
+                    <td class="py-1" id="{{ item_id }}_last_change">{{ item.last_change().strftime('%d.%m.%Y %H:%M:%S') }}</td>
                 </tr>
-            </thead>
-            <tbody>
-                {% for item in p.zigbee2mqtt_items %}
-                    {% set item_id = item.id() %}
-                    <tr>
-                        <td class="py-1">{{ item_id }}</td>
-                        <td class="py-1">{{ item.property.type }}</td>
-                        <td class="py-1" id="{{ item_id }}_value" style="text-align: right">{{ _('Init...') }}</td>
-                        <td class="py-1">{{ p.get_iattr_value(item.conf, 'zigbee2mqtt_topic') }}</td>
-                        <td class="py-1" id="{{ item_id }}_last_update">{{ _('Init...') }}</td>
-                        <td class="py-1" id="{{ item_id }}_last_change">{{ item.last_change().strftime('%d.%m.%Y %H:%M:%S') }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endblock %}
 
 
-<!--
-	Content block for the second tab of the Webinterface
--->
-{% set tab2title = "<strong>" ~ p.get_shortname() ~ " Devices</strong>" %}
+{% set tab2title = "<strong>" ~ plugin_shortname ~ " Devices</strong>" %}
 {% block bodytab2 %}
-<div class="table-responsive" style="margin-left: 3px; margin-right: 3px;" class="row">
-    <div class="mb-2">
-        <span id='webif_pagelength' style="display:none">{{ webif_pagelength }}</span>
-    </div>
-    <div class="col-sm-12">
-        <table id="devicetable" class="table_2 table-striped table-hover pluginList display">
-            <thead>
+<div class="container-fluid m-2 table-resize">
+    <table id="devicetable" class="table_02 table-striped table-hover pluginList display">
+        <thead>
+            <tr>
+                <th class="no">{{ _('#') }}</th>
+                <th class="fn">{{ _('Friendy Name') }}</th>
+                <th>{{ _('IEEE Adresse') }}</th>
+                <th>{{ _('Vendor') }}</th>
+                <th>{{ _('Modell') }}</th>
+                <th>{{ _('Description') }}</th>
+                <th>{{ _('ModellID') }}</th>
+                <th>{{ _('Last seen') }}</th>
+                <th class="lqi">{{ _('LQI') }}</th>
+                <th class="data">{{ _('bereitgestellte Daten') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for device in p.zigbee2mqtt_devices %}
+                {% if p.zigbee2mqtt_devices[device]['meta'] %}
                 <tr>
-                    <th>{{ _('#') }}</th>
-                    <th>{{ _('Friendy Name') }}</th>
-                    <th>{{ _('IEEE Adresse') }}</th>
-                    <th>{{ _('Vendor') }}</th>
-                    <th>{{ _('Modell') }}</th>
-                    <th>{{ _('Description') }}</th>
-                    <th>{{ _('ModellID') }}</th>
-                    <th>{{ _('Last seen') }}</th>
-                    <th>{{ _('LQI') }}</th>
-                    <th>{{ _('bereitgestellte Daten') }}</th>
+                    <td class="py-1">{{ loop.index }}</td>
+                    <td class="py-1">{{ device }}</td>
+                    <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['ieeeAddr'] }}</td>
+                    <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['vendor'] }}</td>
+                    <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['model'] }}</td>
+                    <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['description'] }}</td>
+                    <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['modelID'] }}</td>
+                    <td class="py-1" id="{{ device }}_last_seen">{{ _('Init...') }}</td>
+                    <td class="py-1" id="{{ device }}_lqi">{{ _('Init...') }}</td>
+                    <td class="py-1" id="{{ device }}_data">{{ _('Init...') }}</td>
                 </tr>
-            </thead>
-            <tbody>
-                {% for device in p.zigbee2mqtt_devices %}
-                    {% if p.zigbee2mqtt_devices[device]['meta'] %}
-                    <tr>
-                        <td class="py-1">{{ loop.index }}</td>
-                        <td class="py-1">{{ device }}</td>
-                        <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['ieeeAddr'] }}</td>
-                        <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['vendor'] }}</td>
-                        <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['model'] }}</td>
-                        <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['description'] }}</td>
-                        <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta']['modelID'] }}</td>
-                        <td class="py-1" id="{{ device }}_last_seen">{{ _('Init...') }}</td>
-                        <td class="py-1" id="{{ device }}_lqi">{{ _('Init...') }}</td>
-                        <td class="py-1" id="{{ device }}_data">{{ _('Init...') }}</td>
-                    </tr>
-                    {% endif %}
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endblock %}
 
 
-<!--
-	Content block for the third tab of the Webinterface
--->
 {% set tab3title = "<strong>" ~ " Broker Information</strong>" %}
 {% block bodytab3 %}
 <table class="table table-striped table-hover pluginList">
@@ -281,40 +328,33 @@
         </tr>
     </table>
 {% endif %}
-
-
 {% endblock %}
 
-<!--
-	Content block for the fourth tab of the Webinterface
--->
-{% set tab4title = "<strong>" ~ p.get_shortname() ~ " " ~ _('Maintenance') ~ "</strong>" %}
 
+{% set tab4title = "<strong>" ~ plugin_shortname ~ " " ~ _('Maintenance') ~ "</strong>" %}
 {% block bodytab4 %}
-<div class="container-fluid m-2">
-    <table id="mtable2" class="table table-striped table-hover pluginList">
+<div class="container-fluid m-2 table-resize">
+    <table id="mtable1" class="table table-striped table-hover pluginList display">
         <thead>
             <tr>
-                <th>{{ _('Zigbee Device') }}</th>
-                <th>{{ _('Meta') }}</th>
-                <th>{{ _('Data') }}</th>
+                <th class="type">{{ _('Zigbee Device') }}</th>
+                <th class="data">{{ _('Meta') }}</th>
+                <th class="data">{{ _('Data') }}</th>
             </tr>
         </thead>
         <tbody>
             {% for device in p.zigbee2mqtt_devices %}
                 <tr>
-                    <td><a>{{ device }}</a></td>
-                    <td>{{ p.zigbee2mqtt_devices[device]['meta'] }}</td>
-                    <td>{{ p.zigbee2mqtt_devices[device]['data'] }}</td>
+                    <td class="py-1"><a>{{ device }}</a></td>
+                    <td class="py-1">{{ p.zigbee2mqtt_devices[device]['meta'] }}</td>
+                    <td class="py-1">{{ p.zigbee2mqtt_devices[device]['data'] }}</td>
                 </tr>
             {% endfor %}
         </tbody>
     </table>
-    {{ p.webif_pagelength }}
-</div>
-
-<div class="container-fluid m-2">
-    <table id="mtable1" class="table table-striped table-hover pluginList">
+    <br>
+    <br>
+    <table id="mtable2" class="table table-striped table-hover pluginList display">
         <thead>
             <tr>
                 <th>{{ _('Plugin Device') }}</th>
@@ -324,8 +364,8 @@
         <tbody>
             {% for device in p.zigbee2mqtt_plugin_devices %}
                 <tr>
-                    <td><a>{{ device }}</a></td>
-                    <td>{{ p.zigbee2mqtt_plugin_devices[device]}}</td>
+                    <td class="py-1"><a>{{ device }}</a></td>
+                    <td class="py-1">{{ p.zigbee2mqtt_plugin_devices[device]}}</td>
                 </tr>
             {% endfor %}
         </tbody>

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # vim: set encoding=utf-8 tabstop=4 softtabstop=4 shiftwidth=4 expandtab
 #########################################################################
-#  Copyright 2020-      Martin Sinn                         m.sinn@gmx.de
+#  Copyright 2022-           Michael Wenzel            zel_michael@web.de
 #########################################################################
 #  This file is part of SmartHomeNG.
 #  https://www.smarthomeNG.de
@@ -26,17 +26,9 @@
 #########################################################################
 
 import json
-
+import cherrypy
 from lib.item import Items
 from lib.model.smartplugin import SmartPluginWebIf
-
-
-# ------------------------------------------
-#    Webinterface of the plugin
-# ------------------------------------------
-
-import cherrypy
-import csv
 from jinja2 import Environment, FileSystemLoader
 
 
@@ -51,30 +43,40 @@ class WebInterface(SmartPluginWebIf):
         :type webif_dir: str
         :type plugin: object
         """
+
         self.logger = plugin.logger
         self.webif_dir = webif_dir
         self.plugin = plugin
         self.items = Items.get_instance()
-
         self.tplenv = self.init_template_environment()
+        self.logger.debug(f"Init WebIF of {self.plugin.get_shortname()}")
 
     @cherrypy.expose
-    def index(self, reload=None):
+    def index(self, reload=None, action=None):
         """
         Build index.html for cherrypy
-
         Render the template and return the html file to be delivered to the browser
 
         :return: contents of the template after beeing rendered
         """
+
         self.plugin.get_broker_info()
 
         tmpl = self.tplenv.get_template('index.html')
-        # add values to be passed to the Jinja2 template eg: tmpl.render(p=self.plugin, interface=interface, ...)
-        return tmpl.render(p=self.plugin,
-                           webif_pagelength=self.plugin.webif_pagelength,
+
+        try:
+            pagelength = self.plugin.webif_pagelength
+        except Exception:
+            pagelength = 100
+
+        return tmpl.render(plugin_shortname=self.plugin.get_shortname(),
+                           plugin_version=self.plugin.get_version(),
+                           plugin_info=self.plugin.get_info(),
                            items=sorted(self.plugin.zigbee2mqtt_items, key=lambda k: str.lower(k['_path'])),
-                           item_count=len(self.plugin.zigbee2mqtt_items))
+                           item_count=len(self.plugin.zigbee2mqtt_items),
+                           p=self.plugin,
+                           webif_pagelength=pagelength,
+                           )
 
     @cherrypy.expose
     def get_data_html(self, dataSet=None):
@@ -104,19 +106,23 @@ class WebInterface(SmartPluginWebIf):
             for device in self.plugin.zigbee2mqtt_devices:
                 data['device_values'][device] = {}
                 if 'data' in self.plugin.zigbee2mqtt_devices[device]:
-                    data['device_values'][device]['lqi'] = self.plugin.zigbee2mqtt_devices[device]['data']['linkquality']
-                    data['device_values'][device]['data'] = list(self.plugin.zigbee2mqtt_devices[device]['data'].keys())
+                    data['device_values'][device]['lqi'] = str(self.plugin.zigbee2mqtt_devices[device]['data'].get('linkquality', '-'))
+                    data['device_values'][device]['data'] = ", ".join(list(self.plugin.zigbee2mqtt_devices[device]['data'].keys()))
                 else:
                     data['device_values'][device]['lqi'] = '-'
                     data['device_values'][device]['data'] = '-'
                 if 'meta' in self.plugin.zigbee2mqtt_devices[device]:
-                    data['device_values'][device]['last_seen'] = self.plugin.zigbee2mqtt_devices[device]['meta']['lastSeen'].strftime('%d.%m.%Y %H:%M:%S')
+                    last_seen = self.plugin.zigbee2mqtt_devices[device]['meta'].get('lastSeen', None)
+                    if last_seen:
+                        data['device_values'][device]['last_seen'] = last_seen.strftime('%d.%m.%Y %H:%M:%S')
+                    else:
+                        data['device_values'][device]['last_seen'] = '-'
+                else:
+                    data['device_values'][device]['last_seen'] = '-'
 
-            # return it as json the the web page
+            # return it as json the web page
             try:
                 return json.dumps(data, default=str)
             except Exception as e:
                 self.logger.error("get_data_html exception: {}".format(e))
                 return {}
-
-        return
